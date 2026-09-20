@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-HK">
 <head>
@@ -90,9 +91,20 @@
         </div>
       </div>
       <div class="flex flex-wrap gap-2.5">
+        <!-- 隱藏的檔案上傳 Input -->
+        <input type="file" id="csvFileInput" accept=".csv" class="hidden" @change="importCSV($event)">
+        
+        <!-- 導入 CSV 按鈕 -->
+        <button @click="triggerFileInput()" class="bg-[#8893B0] hover:bg-[#6E7B9E] text-plate-white px-4 py-2.5 rounded-2xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 border border-[#485373]">
+          <span>📤 導入 CSV</span>
+        </button>
+
+        <!-- 導出 CSV 按鈕 -->
         <button @click="exportCSV()" class="bg-berry-bloom hover:bg-[#485373] text-plate-white px-4 py-2.5 rounded-2xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 border border-[#6E7B9E]">
           <span>📥 導出 CSV</span>
         </button>
+
+        <!-- 清空資料按鈕 -->
         <button @click="resetData()" class="bg-[#A85848]/15 hover:bg-[#A85848] text-[#8C3A2B] hover:text-white border border-[#A85848]/30 px-4 py-2.5 rounded-2xl text-sm font-medium transition-all">
           🗑️ 清空資料
         </button>
@@ -348,7 +360,7 @@
 
             <template x-if="items.length === 0">
               <tr>
-                <td colspan="10" class="text-center py-10 text-[#88898E]">目前沒有開支記錄，請在上方新增項目。</td>
+                <td colspan="10" class="text-center py-10 text-[#88898E]">目前沒有開支記錄，請在上方新增項目或導入 CSV 檔案。</td>
               </tr>
             </template>
           </tbody>
@@ -762,6 +774,10 @@
           }
         },
 
+        triggerFileInput() {
+          document.getElementById('csvFileInput').click();
+        },
+
         exportCSV() {
           if (this.items.length === 0) {
             alert('目前沒有資料可導出！');
@@ -785,6 +801,98 @@
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+        },
+
+        parseCSVLine(line) {
+          const result = [];
+          let current = '';
+          let inQuotes = false;
+
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"') {
+              if (inQuotes && nextChar === '"') {
+                current += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim());
+          return result.map(col => col.replace(/^"|"$/g, '').trim());
+        },
+
+        importCSV(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            let text = e.target.result;
+
+            // 移除 UTF-8 BOM 標頭
+            if (text.charCodeAt(0) === 0xFEFF) {
+              text = text.slice(1);
+            }
+
+            const lines = text.split(/\r?\n/);
+            const importedItems = [];
+            const newCategories = new Set(this.categories);
+
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+
+              const cols = this.parseCSVLine(line);
+
+              if (cols.length >= 9) {
+                const category = cols[2] || 'F-傢俬';
+                
+                // 自動記錄 CSV 中出現的新分類
+                if (category && !newCategories.has(category)) {
+                  newCategories.add(category);
+                }
+
+                importedItems.push({
+                  id: Date.now() + i,
+                  name: cols[1],
+                  category: category,
+                  pddPrice: cols[3] !== '' && !isNaN(cols[3]) ? parseFloat(cols[3]) : '',
+                  tbPrice: cols[4] !== '' && !isNaN(cols[4]) ? parseFloat(cols[4]) : '',
+                  price: cols[5] !== '' && !isNaN(cols[5]) ? parseFloat(cols[5]) : '',
+                  purchaseDate: cols[6] || this.todayStr,
+                  paymentMethod: cols[7] || '支付寶',
+                  received: cols[8] === '已收貨'
+                });
+              }
+            }
+
+            if (importedItems.length > 0) {
+              if (confirm(`成功解析 ${importedItems.length} 筆紀錄！\n\n按下「確定」將會用 CSV 檔案內容覆蓋目前的資料。`)) {
+                this.items = importedItems;
+                this.categories = Array.from(newCategories);
+                
+                localStorage.setItem('taobao_categories', JSON.stringify(this.categories));
+                this.saveToStorage();
+                alert('🎉 資料同步導入成功！');
+              }
+            } else {
+              alert('⚠️ 無法解析資料，請確認檔案是否為此系統導出的 CSV 格式。');
+            }
+
+            // 清空 input 讓重複上傳同一檔案時仍能觸發 onChange
+            event.target.value = '';
+          };
+
+          reader.readAsText(file, 'UTF-8');
         }
       }
     }
