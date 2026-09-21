@@ -1,9 +1,775 @@
-resetData() {
-          if (confirm('確定要清空所有開支記錄與自訂分類嗎？此動作無法復原。')) {
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拼淘開支記錄與預算管理 - Blueberry Theme</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Alpine.js CDN -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Chart.js DataLabels Plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    
+    body {
+      background-color: #2F3A55;
+    }
+
+    .bg-blueberry-skin {
+      background-color: #2F3A55;
+    }
+
+    .bg-blueberry-pattern {
+      background-color: #2F3A55;
+      background-image: radial-gradient(rgba(245, 246, 243, 0.07) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+
+    .bg-berry-bloom {
+      background-color: #5C688A;
+    }
+
+    .bg-plate-white {
+      background-color: #F5F6F3;
+    }
+
+    .bg-yogurt-tint {
+      background-color: #E7E2DE;
+    }
+
+    .text-stem-grey {
+      color: #6E6F73;
+    }
+
+    .text-stem-grey-light {
+      color: #D5D7DC;
+    }
+
+    .text-stem-grey-muted {
+      color: #B8BAC0;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(47, 58, 85, 0.2);
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #8E99B5;
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #E7E2DE;
+    }
+  </style>
+</head>
+<body class="bg-blueberry-pattern text-stem-grey-light font-sans min-h-screen p-4 sm:p-8 relative overflow-x-hidden" x-data="taobaoTracker()" x-init="init()">
+
+  <!-- 背景柔光底暈 -->
+  <div class="pointer-events-none fixed -top-32 -left-32 w-[30rem] h-[30rem] bg-[#5C688A]/30 rounded-full blur-3xl -z-10"></div>
+  <div class="pointer-events-none fixed top-1/2 -right-32 w-[30rem] h-[30rem] bg-[#E7E2DE]/10 rounded-full blur-3xl -z-10"></div>
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- 頂部頁頭區 -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-yogurt-tint p-6 rounded-3xl shadow-xl border border-[#D0C9C3]">
+      <div class="flex items-center gap-3.5">
+        <div class="w-12 h-12 rounded-2xl bg-berry-bloom flex items-center justify-center text-white text-2xl shadow-md border border-[#485373]">
+          🫐
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-stem-grey tracking-tight">拼淘開支記錄表</h1>
+          <p class="text-[#88898E] text-xs sm:text-sm mt-0.5">追蹤開支、對比拼淘價格、分類小計與月度統計</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-2.5">
+        <!-- 隱藏的檔案上傳 Input -->
+        <input type="file" id="csvFileInput" accept=".csv" class="hidden" @change="importCSV($event)">
+        
+        <!-- 導入 CSV 按鈕 -->
+        <button @click="triggerFileInput()" class="bg-[#8893B0] hover:bg-[#6E7B9E] text-plate-white px-4 py-2.5 rounded-2xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 border border-[#485373]">
+          <span>📤 導入 CSV</span>
+        </button>
+
+        <!-- 導出 CSV 按鈕 -->
+        <button @click="exportCSV()" class="bg-berry-bloom hover:bg-[#485373] text-plate-white px-4 py-2.5 rounded-2xl text-sm font-medium transition-all shadow-sm flex items-center gap-2 border border-[#6E7B9E]">
+          <span>📥 導出 CSV</span>
+        </button>
+
+        <!-- 清空資料按鈕 -->
+        <button @click="resetData()" class="bg-[#A85848]/15 hover:bg-[#A85848] text-[#8C3A2B] hover:text-white border border-[#A85848]/30 px-4 py-2.5 rounded-2xl text-sm font-medium transition-all">
+          🗑️ 清空資料
+        </button>
+      </div>
+    </div>
+
+    <!-- 新增項目與分類管理區 -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- 新增購物項目表單 -->
+      <div class="lg:col-span-2 bg-berry-bloom p-6 rounded-3xl shadow-xl border border-[#6E7B9E]/40">
+        <h2 class="text-base font-bold text-plate-white mb-4 flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-yogurt-tint"></span>
+          <span>新增拼淘項目</span>
+        </h2>
+        
+        <form @submit.prevent="addItem()" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- 商品名稱 -->
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">商品名稱 / 項目 *</label>
+            <input type="text" x-model="newItem.name" required placeholder="例如：枱腳增高墊" 
+                   class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition">
+          </div>
+
+          <!-- 分類 -->
+          <div>
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">分類</label>
+            <select x-model="newItem.category" class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition cursor-pointer">
+              <template x-for="cat in sortedCategories" :key="cat">
+                <option :value="cat" x-text="cat"></option>
+              </template>
+            </select>
+          </div>
+
+          <!-- 拼多多價錢 (¥) -->
+          <div>
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">拼多多價錢 (¥)</label>
+            <input type="number" step="0.01" min="0" x-model.number="newItem.pddPrice" placeholder="0.00" 
+                   class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition">
+          </div>
+
+          <!-- 淘寶價錢 (¥) -->
+          <div>
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">淘寶價錢 (¥)</label>
+            <input type="number" step="0.01" min="0" x-model.number="newItem.tbPrice" placeholder="0.00" 
+                   class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition">
+          </div>
+
+          <!-- 實付金額 ($) -->
+          <div>
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">實付金額 ($)</label>
+            <input type="number" step="0.01" min="0" x-model.number="newItem.price" placeholder="0.00" 
+                   class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition">
+          </div>
+
+          <!-- 購買日期 -->
+          <div>
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">購買日期</label>
+            <input type="date" x-model="newItem.purchaseDate" 
+                   class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition">
+          </div>
+
+          <!-- 支付方式 -->
+          <div>
+            <label class="block text-xs font-semibold text-stem-grey-light mb-1.5">支付方式</label>
+            <select x-model="newItem.paymentMethod" class="w-full px-3.5 py-2.5 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:ring-2 focus:ring-yogurt-tint focus:outline-none transition cursor-pointer">
+              <option value="支付寶">支付寶</option>
+              <option value="PayMe">PayMe</option>
+              <option value="信用卡">信用卡</option>
+              <option value="Octopus 八達通">Octopus 八達通</option>
+              <option value="其他">其他</option>
+            </select>
+          </div>
+
+          <!-- 提交按鈕 -->
+          <div class="md:col-span-3 flex justify-end pt-2">
+            <button type="submit" class="bg-yogurt-tint hover:bg-[#D8D2CC] text-stem-grey font-bold px-6 py-2.5 rounded-2xl text-sm transition shadow-md active:scale-95 flex items-center gap-2 border border-[#C5BFB8]">
+              <span>＋ 加入列表</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 分類管理區 -->
+      <div class="bg-berry-bloom p-6 rounded-3xl shadow-xl border border-[#6E7B9E]/40 flex flex-col justify-between">
+        <div>
+          <h2 class="text-base font-bold text-plate-white mb-2 flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-yogurt-tint"></span>
+            <span>🏷️ 分類管理</span>
+          </h2>
+          <p class="text-xs text-stem-grey-muted mb-4">現有分類依字母排序，可新增自訂分類：</p>
+          
+          <div class="flex gap-2 mb-4">
+            <input type="text" x-model="newCategoryName" placeholder="例如：M-開支" 
+                   class="flex-1 px-3.5 py-2 bg-plate-white border border-[#DDD8CD] rounded-2xl text-sm text-[#2F3A55] focus:outline-none transition">
+            <button @click="addCategory()" class="bg-blueberry-skin hover:bg-[#232B40] text-plate-white px-4 py-2 rounded-2xl text-sm font-medium transition shrink-0 border border-[#445278]">
+              新增
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-blueberry-skin/40 p-3.5 rounded-2xl border border-[#6E7B9E]/30">
+          <span class="text-xs font-semibold text-stem-grey-muted block mb-2">目前總分類：<span x-text="categories.length" class="text-yogurt-tint font-bold"></span> 個</span>
+          <div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pt-1">
+            <template x-for="cat in sortedCategories" :key="cat">
+              <span class="inline-block bg-plate-white text-[#2F3A55] text-xs px-2.5 py-1 rounded-xl font-medium shadow-2xs" x-text="cat"></span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 主要表格數據 -->
+    <div class="bg-plate-white rounded-3xl shadow-xl border border-[#DDD8CD] overflow-hidden">
+      <div class="p-5 border-b border-[#E5E1D8] flex justify-between items-center bg-yogurt-tint">
+        <h2 class="font-bold text-stem-grey text-base flex items-center gap-2">
+          <span>🛒 拼淘開支明細</span>
+          <span class="text-xs font-normal text-[#88898E]">（最早日期排最頂）</span>
+        </h2>
+        <span class="text-xs text-[#88898E] hidden sm:inline-block">💡 提示：雙擊任何行或點擊「編輯」即可即時修改</span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr class="bg-[#EAE6E1] border-b border-[#DDD8CD] text-stem-grey font-semibold text-xs uppercase tracking-wider">
+              <th class="py-3.5 px-3 w-12 text-center">#</th>
+              <th class="py-3.5 px-4">商品項目</th>
+              <th class="py-3.5 px-4">分類</th>
+              <th class="py-3.5 px-4 text-right">拼多多 (¥)</th>
+              <th class="py-3.5 px-4 text-right">淘寶 (¥)</th>
+              <th class="py-3.5 px-4 text-right">實付 ($)</th>
+              <th class="py-3.5 px-4">購買日期</th>
+              <th class="py-3.5 px-4">支付方式</th>
+              <th class="py-3.5 px-4 text-center">收貨未</th>
+              <th class="py-3.5 px-4 text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#E8E4DD]">
+            <template x-for="(item, index) in sortedItems" :key="item.id">
+              <tr class="hover:bg-[#EFECE8] transition-colors" 
+                  :class="{'bg-[#E8E3DD]': editingId === item.id, 'bg-[#F0EEEA]': item.received && editingId !== item.id}" 
+                  @dblclick="startEdit(item)">
+                
+                <td class="py-3.5 px-3 text-[#88898E] font-medium text-xs text-center" x-text="index + 1"></td>
+
+                <td class="py-3.5 px-4">
+                  <template x-if="editingId === item.id">
+                    <input type="text" x-model="editForm.name" class="w-full px-2.5 py-1 text-sm border border-[#5C688A] rounded-xl focus:outline-none">
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="font-medium text-[#2F3A55]" :class="{'line-through text-[#A0A2A8]': item.received}" x-text="item.name"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4">
+                  <template x-if="editingId === item.id">
+                    <select x-model="editForm.category" class="w-full px-2 py-1 text-sm border border-[#5C688A] rounded-xl focus:outline-none bg-white">
+                      <template x-for="cat in sortedCategories" :key="cat">
+                        <option :value="cat" x-text="cat" :selected="cat === editForm.category"></option>
+                      </template>
+                    </select>
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="inline-block bg-[#E5E1DA] text-[#2F3A55] border border-[#D5CF2] text-xs px-2.5 py-1 rounded-xl font-medium" x-text="item.category || '-'"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4 text-right font-mono">
+                  <template x-if="editingId === item.id">
+                    <input type="number" step="0.01" min="0" x-model.number="editForm.pddPrice" class="w-20 px-2 py-1 text-sm text-right border border-[#5C688A] rounded-xl focus:outline-none">
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="text-[#5C688A] font-medium" x-text="item.pddPrice !== '' && item.pddPrice !== null && item.pddPrice !== undefined ? '¥' + formatAmount(item.pddPrice) : '-'"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4 text-right font-mono">
+                  <template x-if="editingId === item.id">
+                    <input type="number" step="0.01" min="0" x-model.number="editForm.tbPrice" class="w-20 px-2 py-1 text-sm text-right border border-[#5C688A] rounded-xl focus:outline-none">
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="text-[#8C6D53] font-medium" x-text="item.tbPrice !== '' && item.tbPrice !== null && item.tbPrice !== undefined ? '¥' + formatAmount(item.tbPrice) : '-'"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4 text-right font-mono">
+                  <template x-if="editingId === item.id">
+                    <input type="number" step="0.01" min="0" x-model.number="editForm.price" class="w-20 px-2 py-1 text-sm text-right border border-[#5C688A] rounded-xl focus:outline-none">
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="text-[#2F3A55] font-bold" x-text="item.price !== '' && item.price !== null && item.price !== undefined ? '$' + formatAmount(item.price) : '-'"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4">
+                  <template x-if="editingId === item.id">
+                    <input type="date" x-model="editForm.purchaseDate" class="px-2 py-1 text-sm border border-[#5C688A] rounded-xl focus:outline-none">
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="text-xs px-2.5 py-1 rounded-lg bg-[#E5E1DA] font-mono text-[#4F5953]" 
+                          :class="{'bg-[#2F3A55] text-plate-white font-bold': item.purchaseDate === todayStr}"
+                          x-text="item.purchaseDate ? (item.purchaseDate + (item.purchaseDate === todayStr ? ' (今日)' : '')) : '-'"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4">
+                  <template x-if="editingId === item.id">
+                    <select x-model="editForm.paymentMethod" class="px-2 py-1 text-sm border border-[#5C688A] rounded-xl focus:outline-none bg-white">
+                      <option value="支付寶">支付寶</option>
+                      <option value="PayMe">PayMe</option>
+                      <option value="信用卡">信用卡</option>
+                      <option value="Octopus 八達通">Octopus 八達通</option>
+                      <option value="其他">其他</option>
+                    </select>
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <span class="text-[#6E7F73] text-xs" x-text="item.paymentMethod || '-'"></span>
+                  </template>
+                </td>
+
+                <td class="py-3.5 px-4 text-center">
+                  <input type="checkbox" :checked="item.received" @change="toggleReceived(item.id)" 
+                         class="w-4 h-4 text-[#2F3A55] rounded-md focus:ring-[#2F3A55] border-[#B8B0A0] cursor-pointer">
+                </td>
+
+                <td class="py-3.5 px-4 text-center space-x-1">
+                  <template x-if="editingId === item.id">
+                    <div class="inline-flex gap-1">
+                      <button @click="saveEdit(item.id)" class="bg-[#2F3A55] hover:bg-[#20283B] text-white px-2.5 py-1 rounded-xl text-xs font-medium transition shadow-xs">
+                        💾 Save
+                      </button>
+                      <button @click="cancelEdit()" class="bg-[#DDD8CD] hover:bg-[#C8C2B3] text-[#3D352E] px-2.5 py-1 rounded-xl text-xs font-medium transition">
+                        取消
+                      </button>
+                    </div>
+                  </template>
+                  <template x-if="editingId !== item.id">
+                    <div class="inline-flex gap-1">
+                      <button @click="startEdit(item)" class="bg-[#EAE6DD] hover:bg-[#DDD8CD] text-[#2F3A55] px-2.5 py-1 rounded-xl text-xs font-medium transition">
+                        ✏️ 編輯
+                      </button>
+                      <button @click="deleteItem(item.id)" class="bg-[#A85848]/10 hover:bg-[#A85848] text-[#8C3A2B] hover:text-white px-2.5 py-1 rounded-xl text-xs font-medium transition">
+                        🗑️ 刪除
+                      </button>
+                    </div>
+                  </template>
+                </td>
+
+              </tr>
+            </template>
+
+            <template x-if="items.length === 0">
+              <tr>
+                <td colspan="10" class="text-center py-10 text-[#88898E]">目前沒有開支記錄，請在上方新增項目或導入 CSV 檔案。</td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 每月拼淘總開支及分類 Pie Chart 卡片區 -->
+    <div class="bg-berry-bloom p-6 rounded-3xl shadow-xl border border-[#6E7B9E]/40">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-base font-bold text-plate-white flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-yogurt-tint"></span>
+          <span>📅 每月分類開支比例（圓餅圖分析）</span>
+        </h2>
+        <span class="text-xs text-stem-grey-muted">（分類名稱直接於餅塊上顯示）</span>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <template x-for="summary in monthlySummaries" :key="summary.month">
+          <div class="p-6 rounded-3xl border border-[#DDD8CD] bg-plate-white flex flex-col justify-between space-y-6 shadow-sm hover:shadow-md transition-all">
+            
+            <div class="flex justify-between items-start border-b border-[#E5E1D8] pb-3">
+              <div>
+                <span class="text-lg font-bold text-[#2F3A55] block" x-text="summary.month"></span>
+                <span class="text-xs text-[#88898E]" x-text="summary.count + ' 筆購物紀錄'"></span>
+              </div>
+              <div class="text-right">
+                <span class="text-xs text-[#88898E] block font-medium">當月總支出</span>
+                <span class="text-2xl font-bold font-mono text-[#2F3A55]" x-text="'$' + formatAmount(summary.total)"></span>
+              </div>
+            </div>
+
+            <!-- 圓餅圖容器 (加入 min-h 強制控制尺寸以利手機端繪製) -->
+            <div class="relative w-full h-64 min-h-[250px] flex items-center justify-center py-2">
+              <canvas :id="'pieChart-' + summary.month"></canvas>
+            </div>
+
+            <div class="pt-2 border-t border-[#E5E1D8]">
+              <span class="text-xs font-semibold text-stem-grey block mb-2">當月金額明細：</span>
+              <div class="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                <template x-for="catItem in summary.categories" :key="catItem.name">
+                  <div class="flex justify-between items-center text-xs bg-[#EAE6E1] p-2 rounded-xl border border-[#DDD8CD]">
+                    <span class="font-medium text-[#2F3A55] truncate mr-1" x-text="catItem.name"></span>
+                    <span class="font-mono font-bold text-[#2F3A55] shrink-0" x-text="'$' + formatAmount(catItem.total)"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+          </div>
+        </template>
+
+        <template x-if="monthlySummaries.length === 0">
+          <div class="col-span-full text-center py-10 text-stem-grey-muted text-sm">
+            目前無數據可生成圓餅圖。
+          </div>
+        </template>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- JavaScript 與相容性增強邏輯 -->
+  <script>
+    if (window.ChartDataLabels) {
+      Chart.register(ChartDataLabels);
+    }
+
+    function getHongKongToday() {
+      return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
+    }
+
+    function taobaoTracker() {
+      return {
+        todayStr: getHongKongToday(),
+
+        categories: [
+          'F-傢俬',
+          'Fix硬裝',
+          'H-家品',
+          'E-電器',
+          'C-清潔',
+          'K-廚pantry',
+          'T-廁浴',
+          'P-植栽',
+          'Sound',
+          'Movements',
+          'S-文具',
+          'L-學習',
+          'Crafts',
+          'Gifts',
+          'Fun玩意'
+        ],
+
+        chartPalette: [
+          '#2F3A55',
+          '#5C688A',
+          '#6E6F73',
+          '#9E8B7D',
+          '#425073',
+          '#8893B0',
+          '#A85848',
+          '#788078',
+          '#B8A290',
+          '#3B4866'
+        ],
+
+        chartInstances: {},
+        newCategoryName: '',
+        items: [],
+
+        newItem: {
+          name: '',
+          category: 'F-傢俬',
+          pddPrice: '',
+          tbPrice: '',
+          price: '',
+          purchaseDate: getHongKongToday(),
+          paymentMethod: '支付寶',
+          received: false
+        },
+
+        editingId: null,
+        editForm: {
+          name: '',
+          category: '',
+          pddPrice: '',
+          tbPrice: '',
+          price: '',
+          purchaseDate: '',
+          paymentMethod: '',
+          received: false
+        },
+
+        init() {
+          const savedItems = localStorage.getItem('taobao_items');
+          const savedCats = localStorage.getItem('taobao_categories');
+
+          if (savedCats) {
+            this.categories = JSON.parse(savedCats);
+          }
+
+          if (savedItems) {
+            this.items = JSON.parse(savedItems);
+          } else {
+            this.items = [
+              {
+                id: Date.now(),
+                name: '枱腳增高墊',
+                category: 'F-傢俬',
+                pddPrice: 38.00,
+                tbPrice: 42.50,
+                price: 45.50,
+                purchaseDate: this.todayStr,
+                paymentMethod: '支付寶',
+                received: false
+              }
+            ];
+            this.saveToStorage();
+          }
+
+          this.$watch('items', () => {
+            this.triggerPieRender();
+          });
+
+          this.triggerPieRender();
+        },
+
+        get sortedCategories() {
+          return [...this.categories].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+        },
+
+        get sortedItems() {
+          return [...this.items].sort((a, b) => {
+            const dateA = a.purchaseDate && a.purchaseDate.trim() !== '' ? a.purchaseDate : this.todayStr;
+            const dateB = b.purchaseDate && b.purchaseDate.trim() !== '' ? b.purchaseDate : this.todayStr;
+            return dateA.localeCompare(dateB);
+          });
+        },
+
+        get monthlySummaries() {
+          const summaryMap = {};
+
+          this.items.forEach(item => {
+            const dateStr = item.purchaseDate && item.purchaseDate.trim() !== '' ? item.purchaseDate : this.todayStr;
+            const month = dateStr.substring(0, 7);
+            const price = parseFloat(item.price) || 0;
+            const category = item.category || '未分類';
+
+            if (!summaryMap[month]) {
+              summaryMap[month] = { 
+                month: month, 
+                total: 0, 
+                count: 0,
+                catMap: {}
+              };
+            }
+
+            summaryMap[month].total += price;
+            summaryMap[month].count += 1;
+
+            if (!summaryMap[month].catMap[category]) {
+              summaryMap[month].catMap[category] = 0;
+            }
+            summaryMap[month].catMap[category] += price;
+          });
+
+          return Object.values(summaryMap)
+            .map(s => {
+              const categoriesSorted = Object.keys(s.catMap)
+                .map(catName => ({
+                  name: catName,
+                  total: s.catMap[catName]
+                }))
+                .sort((a, b) => b.total - a.total);
+
+              return {
+                month: s.month,
+                total: s.total,
+                count: s.count,
+                categories: categoriesSorted
+              };
+            })
+            .sort((a, b) => b.month.localeCompare(a.month));
+        },
+
+        // 安全延遲觸發（針對手機相容性優化）
+        triggerPieRender() {
+          this.$nextTick(() => {
+            setTimeout(() => {
+              this.renderPieCharts();
+            }, 150);
+          });
+        },
+
+        renderPieCharts() {
+          this.monthlySummaries.forEach(summary => {
+            const canvasId = 'pieChart-' + summary.month;
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return;
+
+            if (this.chartInstances[summary.month]) {
+              this.chartInstances[summary.month].destroy();
+            }
+
+            const labels = summary.categories.map(c => c.name);
+            const dataValues = summary.categories.map(c => c.total);
+
+            this.chartInstances[summary.month] = new Chart(ctx, {
+              type: 'pie',
+              data: {
+                labels: labels,
+                datasets: [{
+                  data: dataValues,
+                  backgroundColor: this.chartPalette.slice(0, labels.length),
+                  borderColor: '#F5F6F3',
+                  borderWidth: 2,
+                  hoverOffset: 6
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                      boxWidth: 10,
+                      padding: 10,
+                      color: '#2F3A55',
+                      font: {
+                        size: 11,
+                        weight: '500'
+                      }
+                    }
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: function(context) {
+                        const val = context.raw || 0;
+                        return ` ${context.label}: $${val.toFixed(2)}`;
+                      }
+                    }
+                  },
+                  datalabels: {
+                    color: '#FFFFFF',
+                    font: {
+                      weight: 'bold',
+                      size: 10
+                    },
+                    formatter: (value, ctx) => {
+                      const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                      const percentage = ((value / total) * 100).toFixed(0);
+                      if (percentage < 7) return '';
+                      return ctx.chart.data.labels[ctx.dataIndex];
+                    },
+                    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+                    textShadowBlur: 4
+                  }
+                }
+              }
+            });
+          });
+        },
+
+        addItem() {
+          if (!this.newItem.name || this.newItem.name.trim() === '') return;
+
+          const dateToUse = this.newItem.purchaseDate && this.newItem.purchaseDate.trim() !== '' 
+                            ? this.newItem.purchaseDate 
+                            : this.todayStr;
+
+          this.items.push({
+            id: Date.now(),
+            name: this.newItem.name.trim(),
+            category: this.newItem.category,
+            pddPrice: this.newItem.pddPrice !== '' ? parseFloat(this.newItem.pddPrice) : '',
+            tbPrice: this.newItem.tbPrice !== '' ? parseFloat(this.newItem.tbPrice) : '',
+            price: this.newItem.price !== '' ? parseFloat(this.newItem.price) : '',
+            purchaseDate: dateToUse,
+            paymentMethod: this.newItem.paymentMethod,
+            received: false
+          });
+
+          this.newItem.name = '';
+          this.newItem.pddPrice = '';
+          this.newItem.tbPrice = '';
+          this.newItem.price = '';
+          this.saveToStorage();
+        },
+
+        toggleReceived(id) {
+          const index = this.items.findIndex(item => item.id === id);
+          if (index !== -1) {
+            this.items[index].received = !this.items[index].received;
+            this.saveToStorage();
+          }
+        },
+
+        startEdit(item) {
+          this.editingId = item.id;
+          this.editForm = {
+            name: item.name,
+            category: item.category,
+            pddPrice: item.pddPrice,
+            tbPrice: item.tbPrice,
+            price: item.price,
+            purchaseDate: item.purchaseDate,
+            paymentMethod: item.paymentMethod,
+            received: item.received
+          };
+        },
+
+        saveEdit(id) {
+          const index = this.items.findIndex(item => item.id === id);
+          if (index !== -1) {
+            const dateToUse = this.editForm.purchaseDate && this.editForm.purchaseDate.trim() !== '' 
+                              ? this.editForm.purchaseDate 
+                              : this.todayStr;
+
+            this.items[index] = {
+              id: id,
+              name: this.editForm.name,
+              category: this.editForm.category,
+              pddPrice: this.editForm.pddPrice !== '' && this.editForm.pddPrice !== null ? parseFloat(this.editForm.pddPrice) : '',
+              tbPrice: this.editForm.tbPrice !== '' && this.editForm.tbPrice !== null ? parseFloat(this.editForm.tbPrice) : '',
+              price: this.editForm.price !== '' && this.editForm.price !== null ? parseFloat(this.editForm.price) : '',
+              purchaseDate: dateToUse,
+              paymentMethod: this.editForm.paymentMethod,
+              received: this.editForm.received
+            };
+          }
+          this.editingId = null;
+          this.saveToStorage();
+        },
+
+        cancelEdit() {
+          this.editingId = null;
+        },
+
+        deleteItem(id) {
+          if (confirm('確定要刪除此筆記錄嗎？')) {
+            this.items = this.items.filter(item => item.id !== id);
+            this.saveToStorage();
+          }
+        },
+
+        addCategory() {
+          const trimmed = this.newCategoryName.trim();
+          if (trimmed && !this.categories.includes(trimmed)) {
+            this.categories.push(trimmed);
+            this.newCategoryName = '';
+            localStorage.setItem('taobao_categories', JSON.stringify(this.categories));
+          }
+        },
+
+        formatAmount(val) {
+          if (val === '' || val === null || val === undefined || isNaN(val)) return '0.00';
+          return (Math.round(parseFloat(val) * 100) / 100).toFixed(2);
+        },
+
+        saveToStorage() {
+          localStorage.setItem('taobao_items', JSON.stringify(this.items));
+        },
+
+        resetData() {
+          if (confirm('警告：確定要清空所有資料嗎？此動作無法復原。')) {
             this.items = [];
             localStorage.removeItem('taobao_items');
-            localStorage.removeItem('taobao_categories');
-            location.reload();
           }
         },
 
@@ -13,33 +779,54 @@ resetData() {
 
         exportCSV() {
           if (this.items.length === 0) {
-            alert('目前沒有資料可供導出。');
+            alert('目前沒有資料可導出！');
             return;
           }
 
-          const headers = ['商品名稱', '分類', '拼多多價錢(RMB)', '淘寶價錢(RMB)', '實付金額(HKD)', '購買日期', '支付方式', '是否收貨'];
-          
-          const rows = this.sortedItems.map(item => [
-            `"${(item.name || '').replace(/"/g, '""')}"`,
-            `"${(item.category || '').replace(/"/g, '""')}"`,
-            item.pddPrice !== '' && item.pddPrice !== null ? item.pddPrice : '',
-            item.tbPrice !== '' && item.tbPrice !== null ? item.tbPrice : '',
-            item.price !== '' && item.price !== null ? item.price : '',
-            `"${item.purchaseDate || ''}"`,
-            `"${(item.paymentMethod || '').replace(/"/g, '""')}"`,
-            item.received ? '是' : '否'
-          ]);
+          let csvContent = "\uFEFF項目數字,商品名稱,分類,拼多多價錢(¥),淘寶價錢(¥),實付金額($),購買日期,支付方式,收貨狀態\n";
+          this.sortedItems.forEach((item, idx) => {
+            const pdd = item.pddPrice !== '' ? this.formatAmount(item.pddPrice) : '';
+            const tb = item.tbPrice !== '' ? this.formatAmount(item.tbPrice) : '';
+            const realPrice = item.price !== '' ? this.formatAmount(item.price) : '';
+            const recStatus = item.received ? '已收貨' : '未收貨';
+            csvContent += `"${idx + 1}","${item.name}","${item.category}","${pdd}","${tb}","${realPrice}","${item.purchaseDate || ''}","${item.paymentMethod || ''}","${recStatus}"\n`;
+          });
 
-          const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
           const url = URL.createObjectURL(blob);
           const link = document.createElement('a');
-          
           link.setAttribute('href', url);
           link.setAttribute('download', `拼淘開支記錄_${this.todayStr}.csv`);
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
+        },
+
+        parseCSVLine(line) {
+          const result = [];
+          let current = '';
+          let inQuotes = false;
+
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            const nextChar = line[i + 1];
+
+            if (char === '"') {
+              if (inQuotes && nextChar === '"') {
+                current += '"';
+                i++;
+              } else {
+                inQuotes = !inQuotes;
+              }
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim());
+          return result.map(col => col.replace(/^"|"$/g, '').trim());
         },
 
         importCSV(event) {
@@ -48,56 +835,65 @@ resetData() {
 
           const reader = new FileReader();
           reader.onload = (e) => {
-            try {
-              const text = e.target.result;
-              const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
-              if (lines.length <= 1) {
-                alert('CSV 檔案無有效數據');
-                return;
-              }
+            let text = e.target.result;
 
-              // 跳過 Header 進行解析
-              const newItems = [];
-              for (let i = 1; i < lines.length; i++) {
-                // 正則解析 CSV Row（處理包含逗號的字串）
-                const cols = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(',');
-                const cleanCols = cols.map(col => col.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
-
-                if (cleanCols.length > 0 && cleanCols[0]) {
-                  const category = cleanCols[1] || '未分類';
-                  
-                  // 自動擴充未存在的分類
-                  if (category && !this.categories.includes(category)) {
-                    this.categories.push(category);
-                  }
-
-                  newItems.push({
-                    id: Date.now() + i,
-                    name: cleanCols[0],
-                    category: category,
-                    pddPrice: cleanCols[2] ? parseFloat(cleanCols[2]) || '' : '',
-                    tbPrice: cleanCols[3] ? parseFloat(cleanCols[3]) || '' : '',
-                    price: cleanCols[4] ? parseFloat(cleanCols[4]) || '' : '',
-                    purchaseDate: cleanCols[5] || this.todayStr,
-                    paymentMethod: cleanCols[6] || '支付寶',
-                    received: cleanCols[7] === '是' || cleanCols[7] === 'true'
-                  });
-                }
-              }
-
-              this.items = [...this.items, ...newItems];
-              this.saveToStorage();
-              localStorage.setItem('taobao_categories', JSON.stringify(this.categories));
-              alert(`成功導入 ${newItems.length} 筆開支記錄！`);
-            } catch (err) {
-              alert('解析 CSV 失敗，請確認檔案格式是否正確。');
-            } finally {
-              event.target.value = '';
+            // 移除 UTF-8 BOM 標頭
+            if (text.charCodeAt(0) === 0xFEFF) {
+              text = text.slice(1);
             }
+
+            const lines = text.split(/\r?\n/);
+            const importedItems = [];
+            const newCategories = new Set(this.categories);
+
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+
+              const cols = this.parseCSVLine(line);
+
+              if (cols.length >= 9) {
+                const category = cols[2] || 'F-傢俬';
+                
+                // 自動記錄 CSV 中出現的新分類
+                if (category && !newCategories.has(category)) {
+                  newCategories.add(category);
+                }
+
+                importedItems.push({
+                  id: Date.now() + i,
+                  name: cols[1],
+                  category: category,
+                  pddPrice: cols[3] !== '' && !isNaN(cols[3]) ? parseFloat(cols[3]) : '',
+                  tbPrice: cols[4] !== '' && !isNaN(cols[4]) ? parseFloat(cols[4]) : '',
+                  price: cols[5] !== '' && !isNaN(cols[5]) ? parseFloat(cols[5]) : '',
+                  purchaseDate: cols[6] || this.todayStr,
+                  paymentMethod: cols[7] || '支付寶',
+                  received: cols[8] === '已收貨'
+                });
+              }
+            }
+
+            if (importedItems.length > 0) {
+              if (confirm(`成功解析 ${importedItems.length} 筆紀錄！\n\n按下「確定」將會用 CSV 檔案內容覆蓋目前的資料。`)) {
+                this.items = importedItems;
+                this.categories = Array.from(newCategories);
+                
+                localStorage.setItem('taobao_categories', JSON.stringify(this.categories));
+                this.saveToStorage();
+                alert('🎉 資料同步導入成功！');
+              }
+            } else {
+              alert('⚠️ 無法解析資料，請確認檔案是否為此系統導出的 CSV 格式。');
+            }
+
+            // 清空 input 讓重複上傳同一檔案時仍能觸發 onChange
+            event.target.value = '';
           };
+
           reader.readAsText(file, 'UTF-8');
         }
-      };
+      }
     }
   </script>
 </body>
